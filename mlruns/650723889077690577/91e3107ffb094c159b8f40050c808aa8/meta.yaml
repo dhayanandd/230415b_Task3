@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Assignment/mlruns/650723889077690577/91e3107ffb094c159b8f40050c808aa8/artifacts
+end_time: 1756206701677
+experiment_id: '650723889077690577'
+lifecycle_stage: active
+run_id: 91e3107ffb094c159b8f40050c808aa8
+run_name: manual_logging_final_model
+start_time: 1756206666481
+status: 3
+user_id: adhay
+tags: []
+source_type: 4
+source_name: ''
+entry_point_name: ''
+source_version: ''

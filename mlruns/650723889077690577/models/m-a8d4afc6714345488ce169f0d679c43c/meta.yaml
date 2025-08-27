@@ -1,0 +1,10 @@
+artifact_location: file:///C:/Assignment/mlruns/650723889077690577/models/m-a8d4afc6714345488ce169f0d679c43c/artifacts
+creation_timestamp: 1756225059001
+experiment_id: '650723889077690577'
+last_updated_timestamp: 1756225072180
+model_id: m-a8d4afc6714345488ce169f0d679c43c
+model_type: null
+name: melbourne_price_model
+source_run_id: a9011aa1f06a422fb9fc757132e46f83
+status: 2
+status_message: null
