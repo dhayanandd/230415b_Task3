@@ -1,68 +1,35 @@
-# app.py — Melbourne House Price Predictor (Streamlit Cloud-ready, robust loader)
-import os
+#!/usr/bin/env python
+# coding: utf-8
+
+# app.py — Melbourne House Price Predictor (robust, fixed)
 import pandas as pd
 import numpy as np
 import streamlit as st
-
-# Try to import PyCaret; fall back to joblib if needed
-try:
-    from pycaret.regression import load_model, predict_model
-    _HAVE_PYCARET = True
-except Exception:
-    _HAVE_PYCARET = False
-    from joblib import load as joblib_load
+from pycaret.regression import load_model, predict_model
 
 st.set_page_config(page_title="Melbourne House Price Predictor", page_icon="🏠", layout="centered")
 
 # ---------------------------
-# Model loader with fallbacks
+# Load trained PyCaret pipeline
 # ---------------------------
-@st.cache_resource(show_spinner=True)
-def load_pipeline():
-    """
-    Try the common save patterns:
-      1) PyCaret base path (no .pkl)
-      2) Explicit .pkl path
-      3) joblib.load as a fallback
-    """
-    candidates = [
-        "models/melbourne_price_pipeline",        # PyCaret save_model base path
-        "models/melbourne_price_pipeline.pkl",    # explicit pickle path
-    ]
+@st.cache_resource(show_spinner=False)
+def get_model():
+    return load_model("models/melbourne_price_pipeline")
 
-    last_err = None
-    for path in candidates:
-        try:
-            if _HAVE_PYCARET:
-                return load_model(path)
-        except Exception as e:
-            last_err = e
+model = get_model()
 
-        # Fallback to joblib if PyCaret load fails or not available
-        try:
-            return joblib_load(path if path.endswith(".pkl") else f"{path}.pkl")
-        except Exception as e:
-            last_err = e
+st.title("Melbourne House Price Predictor")
+st.caption("Alagarsamy Dhayanand | 230415b")
 
-    raise RuntimeError(f"Could not load model from {candidates}. Last error: {last_err}")
-
-model = load_pipeline()
-
-st.title("🏠 Melbourne House Price Predictor")
-st.caption("Real-time predictions with a saved PyCaret pipeline (tracked in MLflow)")
-
-with st.expander("ℹ️ Instructions", expanded=False):
+with st.expander("Instructions", expanded=False):
     st.markdown(
-        "- Enter property details on the left and click **Predict Price**.\n"
-        "- If you **retrained** the model to remove non-runtime/leaky columns, turn on the toggle below.\n"
-        "- If you did **not** retrain yet, keep the toggle OFF (the app will include placeholder columns expected by the original pipeline)."
+        "- Enter property details on the left.\n"
+        "- Click **Predict Price** to get an estimate.\n"
+        "- Some nonessential columns are filled with safe placeholders to match the training schema."
     )
 
-# Toggle depending on whether you retrained the model to ignore placeholders
-retrained_no_placeholders = st.toggle("I retrained without placeholders (ignore Address/Seller/Date/Postcode/LogPrice/Price_per_sqm)", value=False)
-
 # ---------------------------
-# Sidebar inputs (runtime features)
+# Sidebar inputs (core features)
 # ---------------------------
 st.sidebar.header("Property Inputs")
 
@@ -81,6 +48,7 @@ Propertycount = st.sidebar.number_input("Propertycount (in suburb)", min_value=0
 SaleYear = st.sidebar.number_input("Sale Year", min_value=2007, max_value=2025, value=2017, step=1)
 SaleMonth = st.sidebar.slider("Sale Month", min_value=1, max_value=12, value=6)
 
+# Categorical
 Method = st.sidebar.selectbox("Sale Method", options=["S", "Other"], index=0)
 Type = st.sidebar.selectbox("Property Type", options=['h', 'u', 't', 'dev site', 'o res'], index=0)
 
@@ -88,21 +56,24 @@ Region = st.sidebar.text_input("Region (or 'Other')", value="Other")
 CouncilArea = st.sidebar.text_input("Council Area (or 'Other')", value="Other")
 Suburb = st.sidebar.text_input("Suburb (or 'Other')", value="Other")
 
-use_location = st.sidebar.checkbox("Provide Latitude/Longitude?", value=False)
+# Optional geo inputs (trained pipeline likely included Latitude/Longitude)
+use_location = st.sidebar.checkbox("Provide exact Latitude/Longitude?", value=False)
 if use_location:
     Latitude = st.sidebar.number_input("Latitude", value=-37.80, step=0.01, format="%.5f")
     Longitude = st.sidebar.number_input("Longitude", value=145.00, step=0.01, format="%.5f")
 else:
+    # Sensible Melbourne defaults (median-ish), matches cleaning imputation
     Latitude = -37.80
     Longitude = 145.00
 
 # ---------------------------
-# Build input rows (two modes)
+# Build prediction row (incl. placeholders for expected columns)
 # ---------------------------
-def build_runtime_only_row():
-    """Row for retrained model that ignores placeholders."""
+def build_input_df():
     property_age = max(0, int(SaleYear) - int(YearBuilt)) if YearBuilt > 0 else 0
-    return {
+
+    row = {
+        # Core numeric/categorical inputs
         'Rooms': int(Rooms),
         'Bedroom2': int(Bedroom2),
         'Bathroom': int(Bathroom),
@@ -115,75 +86,55 @@ def build_runtime_only_row():
         'Region': Region.strip() or 'Other',
         'Suburb': Suburb.strip() or 'Other',
         'Method': Method,
-        'Type': Type,
+        'Type': Type,                          # important categorical
         'Propertycount': int(Propertycount),
         'SaleYear': int(SaleYear),
         'SaleMonth': int(SaleMonth),
         'PropertyAge': int(property_age),
         'Latitude': float(Latitude),
         'Longitude': float(Longitude),
-    }
 
-def build_with_placeholders_row():
-    """Row for original pipeline that still expects the extra columns."""
-    row = build_runtime_only_row()
-    # Safe placeholders (match earlier training schema)
-    row.update({
+        # If present during training; safe to send NaN at inference
         'Price_per_sqm': np.nan,
+
+        # Placeholders for columns your pipeline expects (from your error)
         'Address': 'Unknown',
         'Seller': 'Other',
-        'Postcode': '3000',          # keep as string to match cleaning
-        'Date': '2017-06-15',        # ISO-format string
-        'LogPrice': 0.0
-    })
-    return row
-
-def build_input_df():
-    row = build_runtime_only_row() if retrained_no_placeholders else build_with_placeholders_row()
+        'Postcode': '3000',                     # string safe if casted in cleaning
+        'Date': '2017-06-15',                   # ISO date string
+        'LogPrice': 0.0                         # neutral placeholder (proper fix: retrain ignoring this)
+    }
     return pd.DataFrame([row])
 
 # ---------------------------
-# Prediction button
+# Predict button + robust prediction column handling
 # ---------------------------
-st.subheader("Enter details on the left, then click Predict")
+st.subheader("Enter details in the sidebar, then click Predict")
 
-left, right = st.columns(2)
-with left:
+col1, col2 = st.columns(2)
+
+with col1:
     if st.button("Predict Price", type="primary", use_container_width=True):
         input_df = build_input_df()
         try:
-            # Use PyCaret's predict_model if available; else, try scikit-learn-style .predict
-            if _HAVE_PYCARET:
-                preds = predict_model(model, data=input_df)
-                # Find prediction column robustly
-                added_cols = [c for c in preds.columns if c not in input_df.columns]
-                preferred = ['Label', 'prediction_label', 'Prediction', 'Predicted', 'Score']
-                pred_col = next((c for c in preferred if c in preds.columns), None) or (added_cols[0] if added_cols else None)
-                if pred_col is None:
-                    raise ValueError(f"Could not find prediction column. Columns: {list(preds.columns)}")
-                price = float(preds[pred_col].iloc[0])
-            else:
-                # Fallback for joblib-loaded scikit-learn pipeline
-                price = float(model.predict(input_df)[0])
+            preds = predict_model(model, data=input_df)
 
-            st.success(f"💰 **Predicted Price:** ${price:,.0f}")
+            # Robustly find the prediction column (PyCaret 2.x vs 3.x)
+            added_cols = [c for c in preds.columns if c not in input_df.columns]
+            preferred = ['Label', 'prediction_label', 'Prediction', 'Predicted', 'Score']
+            pred_col = next((c for c in preferred if c in preds.columns), None)
+            if pred_col is None:
+                pred_col = added_cols[0] if added_cols else None
+
+            if pred_col is None:
+                raise ValueError(f"Could not find prediction column. Columns: {list(preds.columns)}")
+
+            price = float(preds[pred_col].iloc[0])
+            st.success(f" **Predicted Price:** ${price:,.0f}")
 
             with st.expander("See input & output (debug)"):
-                if _HAVE_PYCARET:
-                    st.write("Prediction column detected:", pred_col)
-                    st.dataframe(preds, use_container_width=True)
-                else:
-                    st.dataframe(input_df.assign(Prediction=price), use_container_width=True)
+                st.write("Prediction column used:", pred_col)
+                st.dataframe(preds, use_container_width=True)
 
         except Exception as e:
             st.error(f"Prediction failed: {e}")
-
-with right:
-    st.info(
-        "This app loads a saved pipeline (preprocessing + model). "
-        "If you retrained without non-runtime columns, turn on the toggle above. "
-        "Otherwise, the app includes placeholder fields so the original pipeline schema matches."
-    )
-
-st.markdown("---")
-st.caption("Model path tried: `models/melbourne_price_pipeline` / `.pkl` • PyCaret 2/3 compatible")
