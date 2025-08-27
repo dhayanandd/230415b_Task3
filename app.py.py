@@ -14,8 +14,6 @@ st.set_page_config(page_title="Melbourne House Price Predictor", page_icon="🏠
 # ---------------------------
 @st.cache_resource(show_spinner=False)
 def get_model():
-    # Use the base path without .pkl if you saved it that way in PyCaret
-    # e.g., save_model(final_model, "models/melbourne_price_pipeline")
     return load_model("models/melbourne_price_pipeline")
 
 model = get_model()
