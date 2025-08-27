@@ -14,7 +14,7 @@ st.set_page_config(page_title="Melbourne House Price Predictor", page_icon="🏠
 # ---------------------------
 @st.cache_resource(show_spinner=False)
 def get_model():
-    return load_model("models/melbourne_price_pipeline")
+    return load_model("models/melbourne_price_pipeline.pkl")
 
 model = get_model()
 
