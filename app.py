@@ -9,9 +9,7 @@ from pycaret.regression import load_model, predict_model
 
 st.set_page_config(page_title="Melbourne House Price Predictor", page_icon="🏠", layout="centered")
 
-# ---------------------------
 # Load trained PyCaret pipeline
-# ---------------------------
 @st.cache_resource(show_spinner=False)
 def get_model():
     return load_model("melbourne_price_pipeline")
@@ -56,13 +54,11 @@ Region = st.sidebar.text_input("Region (or 'Other')", value="Other")
 CouncilArea = st.sidebar.text_input("Council Area (or 'Other')", value="Other")
 Suburb = st.sidebar.text_input("Suburb (or 'Other')", value="Other")
 
-# Optional geo inputs (trained pipeline likely included Latitude/Longitude)
 use_location = st.sidebar.checkbox("Provide exact Latitude/Longitude?", value=False)
 if use_location:
     Latitude = st.sidebar.number_input("Latitude", value=-37.80, step=0.01, format="%.5f")
     Longitude = st.sidebar.number_input("Longitude", value=145.00, step=0.01, format="%.5f")
 else:
-    # Sensible Melbourne defaults (median-ish), matches cleaning imputation
     Latitude = -37.80
     Longitude = 145.00
 
@@ -73,7 +69,6 @@ def build_input_df():
     property_age = max(0, int(SaleYear) - int(YearBuilt)) if YearBuilt > 0 else 0
 
     row = {
-        # Core numeric/categorical inputs
         'Rooms': int(Rooms),
         'Bedroom2': int(Bedroom2),
         'Bathroom': int(Bathroom),
@@ -86,7 +81,7 @@ def build_input_df():
         'Region': Region.strip() or 'Other',
         'Suburb': Suburb.strip() or 'Other',
         'Method': Method,
-        'Type': Type,                          # important categorical
+        'Type': Type,             
         'Propertycount': int(Propertycount),
         'SaleYear': int(SaleYear),
         'SaleMonth': int(SaleMonth),
@@ -94,20 +89,18 @@ def build_input_df():
         'Latitude': float(Latitude),
         'Longitude': float(Longitude),
 
-        # If present during training; safe to send NaN at inference
         'Price_per_sqm': np.nan,
 
-        # Placeholders for columns your pipeline expects (from your error)
         'Address': 'Unknown',
         'Seller': 'Other',
-        'Postcode': '3000',                     # string safe if casted in cleaning
-        'Date': '2017-06-15',                   # ISO date string
-        'LogPrice': 0.0                         # neutral placeholder (proper fix: retrain ignoring this)
+        'Postcode': '3000',             
+        'Date': '2017-06-15',        
+        'LogPrice': 0.0             
     }
     return pd.DataFrame([row])
 
 # ---------------------------
-# Predict button + robust prediction column handling
+# Predict button + robust prediction column handling 
 # ---------------------------
 st.subheader("Enter details in the sidebar, then click Predict")
 
